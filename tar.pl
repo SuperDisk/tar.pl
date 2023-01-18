@@ -1,13 +1,17 @@
+#!/usr/bin/env swipl
+
+:- use_module(library(main)).
 :- use_module(library(clpfd)).
 :- use_module(library(dcg/basics)).
 :- use_module(library(pure_input)).
 :- use_module(library(reif)).
+:- use_module(library(readutil)).
 
-... --> [].
-... --> [_], ... .
+:- initialization(main, main).
+:- set_prolog_stack(global, limit(100 000 000 000)).
+
 seq([])     --> [].
 seq([E|Es]) --> [E], seq(Es).
-skip(N) --> {length(A, N)}, seq(A).
 
 u8(N) --> [N], {N in 0..255}.
 
@@ -19,18 +23,20 @@ u64(N) --> u32(DW1), u32(DW2),
            {N in 0..18446744073709551615,
             N #= (DW2 << 32) + DW1}.
 
-string(Len, Str) --> {length(Str, Len)}, seq(Str).
+string(Len, Str) -->
+    {length(Bytes, Len),
+     append(Str0, Zeros, Bytes),
+     maplist(=(0), Zeros),
+     maplist(dif(0), Str0)},
+    seq(Bytes), {string_codes(Str, Str0)}.
 padding(Len) -->
     {length(Padding, Len),
      maplist(=(0), Padding)},
     seq(Padding).
 
-dumpfile(Length, Blocks, FileName) :-
-    append(Blocks, Data),
-    length(FileData, Length),
-    prefix(FileData, Data),
+dump_entry(entry(header(FileName,_,_,_,_,_,_,_,_,_,_,_,_,_), Data)) :-
     open(FileName,write,Out,[type(binary)]),
-    maplist(put_byte(Out), FileData),
+    maplist(put_byte(Out), Data),
     close(Out).
 
 dumpb(X, Filename) :-
@@ -45,8 +51,8 @@ octal_string_number_([H | T], N) :-
     V in 0..7,
     N #= (N0 * 8) + V.
 
-octal_string_number(OctalStr, Number) :-
-    length(OctalStr, 12),
+octal_string_number(Digits, OctalStr, Number) :-
+    length(OctalStr, Digits),
     reverse(OctalStr, ROctalStr),
     if_( ROctalStr = [0x20 | _]
          , ROctalStr = [0x20 | ROctalStr2]
@@ -55,7 +61,7 @@ octal_string_number(OctalStr, Number) :-
     octal_string_number_(ROctalStr2, Number).
 
 octal_number(N) -->
-    {octal_string_number(OctalStr, N)},
+    {octal_string_number(12, OctalStr, N)},
     seq(OctalStr).
 
 tar_header(header(FileName, FileMode, OwnerId, GroupId, FileSize,
@@ -94,10 +100,33 @@ tar_entry(entry(Header, Data)) -->
     {Header = header(_, _, _, _, FileSize, _, _, _, _, _, _, _, _, _),
      (FileSize mod 512 #\= 0) #<==> M,
      BlocksNeeded #= FileSize div 512 + M},
-    tar_data_blocks(BlocksNeeded, Data).
+    tar_data_blocks(BlocksNeeded, Blocks),
+    {append(Blocks, Data0),
+     length(Data, FileSize),
+     append(Data, Zeros, Data0),
+     maplist(=(0), Zeros)}.
 
 tar([]) -->
     padding(1024).
 tar([H | T]) -->
     tar_entry(H),
     tar(T).
+
+read_file(Filename, entry(Header, Data)) :-
+    read_file_to_codes(Filename, Data, [type(binary)]),
+    length(Data, FileSize),
+    Header0 = header(Filename, 0, 0, 0, FileSize, 0, 0x2020202020202020, 48, "", "", "", 0, 0, ""),
+    phrase(tar_header(Header0), Header0Bytes),
+    sum_list(Header0Bytes, ChecksumVal),
+    octal_string_number(8, ChecksumBytes, ChecksumVal),
+    phrase(u64(Checksum), ChecksumBytes),
+    Header = header(Filename, 0, 0, 0, FileSize, 0, Checksum, 48, "", "", "", 0, 0, "").
+
+main([cf, Out | Files]) :-
+    maplist(read_file, Files, Entries),
+    phrase(tar(Entries), Bytes),
+    dumpb(Bytes, Out).
+
+main([xf, TarFile]) :-
+    phrase_from_file(tar(Entries), TarFile, [type(binary)]),
+    maplist(dump_entry, Entries).
