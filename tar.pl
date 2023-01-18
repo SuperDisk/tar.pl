@@ -29,10 +29,9 @@ string(Len, Str) -->
      maplist(=(0), Zeros),
      maplist(dif(0), Str0)},
     seq(Bytes), {string_codes(Str, Str0)}.
-padding(Len) -->
-    {length(Padding, Len),
-     maplist(=(0), Padding)},
-    seq(Padding).
+
+padding(0) --> [].
+padding(Len) --> [0], {Len #> 0, Len_1 #= Len-1}, padding(Len_1).
 
 dump_entry(entry(header(FileName,_,_,_,_,_,_,_,_,_,_,_,_,_), Data)) :-
     open(FileName,write,Out,[type(binary)]),
@@ -85,13 +84,10 @@ tar_header(header(FileName, FileMode, OwnerId, GroupId, FileSize,
     string(155, FilenamePrefix),
     padding(12). % Seems to be some extension thing
 
-tar_data_block(Data) -->
-    {length(Data, 512)},
-    seq(Data).
-
+tar_data_block(Data) --> {length(Data, 512)}, seq(Data).
 tar_data_blocks(0, []) --> [].
 tar_data_blocks(N, [H | T]) -->
-    {N_1 #= N - 1},
+    {N #> 0, N_1 #= N - 1},
     tar_data_block(H),
     tar_data_blocks(N_1, T).
 

@@ -326,4 +326,4 @@ It's unfortunately absolutely dog slow. I think it has to do with SWI-Prolog's u
 
 I've heard however that Scryer Prolog uses a more efficient internal representation, which might work better but I haven't tried it out yet.
 
-Also, this is a really simple implementation that doesn't deal with file paths, permissions, user IDs or any of that junk.
+Also, this is a really simple implementation that doesn't deal with file paths, permissions, user IDs, etc.
