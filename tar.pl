@@ -8,7 +8,6 @@
 :- use_module(library(readutil)).
 
 :- initialization(main, main).
-:- set_prolog_stack(global, limit(100 000 000 000)).
 
 seq([])     --> [].
 seq([E|Es]) --> [E], seq(Es).
@@ -53,9 +52,10 @@ octal_string_number_([H | T], N) :-
 octal_string_number(Digits, OctalStr, Number) :-
     length(OctalStr, Digits),
     reverse(OctalStr, ROctalStr),
-    if_( ROctalStr = [0x20 | _]
-         , ROctalStr = [0x20 | ROctalStr2]
-         , ROctalStr2 = ROctalStr
+    ROctalStr = [Ch | _],
+    if_( Ch = 0x20
+       , ROctalStr = [0x20 | ROctalStr2]
+       , ROctalStr2 = ROctalStr
        ),
     octal_string_number_(ROctalStr2, Number).
 
